@@ -526,17 +526,36 @@ function loop(t) {
         b.sp = roamSpeed() * (0.85 + Math.random() * 0.3);
         b.nextTurnAt = t + 1200 + Math.random() * 1300;
       }
-      // steer: rotate current heading toward the target at a capped turn rate
-      const desired = Math.atan2(b.ty - b.y, b.tx - b.x);
+      // avoid other roams: steer away when too close, and slow down
+      let avx = 0, avy = 0, close = false;
+      for (const o of bugs) {
+        if (o === b || !o.alive || o.delay > 0) continue;
+        const dx = b.x - o.x, dy = b.y - o.y;
+        const d = Math.hypot(dx, dy);
+        const range = (b.r + o.r) * 2.5;
+        if (d < range && d > 0.001) {
+          close = true;
+          const w = (1 - d / range) / d;  // stronger the closer they are
+          avx += dx * w;
+          avy += dy * w;
+        }
+      }
+      let desired = Math.atan2(b.ty - b.y, b.tx - b.x);
+      let spMul = 1, maxTurn = 4.5 * dt;
+      if (close) {
+        desired = Math.atan2(avy, avx); // head away from the crowd
+        spMul = 0.4;                     // crawl around them
+        maxTurn = 2.5 * dt;              // cautious, smaller turns
+      }
+      // steer: rotate current heading toward the goal at a capped turn rate
       let cur = Math.atan2(b.vy, b.vx);
       let diff = desired - cur;
       while (diff > Math.PI) diff -= Math.PI * 2;
       while (diff < -Math.PI) diff += Math.PI * 2;
-      const maxTurn = 4.5 * dt; // radians this frame (~258°/s top rate)
       const step = Math.max(-maxTurn, Math.min(maxTurn, diff));
       const newDir = cur + step;
-      b.vx = Math.cos(newDir) * b.sp;
-      b.vy = Math.sin(newDir) * b.sp;
+      b.vx = Math.cos(newDir) * b.sp * spMul;
+      b.vy = Math.sin(newDir) * b.sp * spMul;
     }
     b.x += b.vx * dt;
     b.y += b.vy * dt;
