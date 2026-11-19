@@ -102,6 +102,47 @@
     text-shadow: 0 0 16px rgba(57,255,20,.45);
   }
 
+  .row { display: flex; gap: 14px; width: 100%; max-width: 340px; }
+  .row button { flex: 1; }
+  .ghostbtn {
+    padding: 14px 0; font-size: 16px; font-weight: 700;
+    background: #161616; color: #999;
+    border: 2px solid #2c2c2c; border-radius: 14px; cursor: pointer;
+  }
+
+  /* ---------- stats popup ---------- */
+  #stats {
+    position: fixed; inset: 0; z-index: 20;
+    background: rgba(0,0,0,.85);
+    display: flex; align-items: center; justify-content: center; padding: 24px;
+  }
+  .statsbox {
+    background: #0d0d0d; border: 1px solid #2a2a2a; border-radius: 20px;
+    padding: 24px 20px; width: 100%; max-width: 340px;
+    display: flex; flex-direction: column; gap: 16px;
+  }
+  .statsbox h2 { font-size: 22px; letter-spacing: 1px; color: #ddd; text-align: center; }
+  table { width: 100%; border-collapse: collapse; }
+  td { padding: 12px 6px; font-size: 20px; border-bottom: 1px solid #1e1e1e; }
+  tr:last-child td { border-bottom: none; }
+  .dot {
+    display: inline-block; width: 22px; height: 22px; border-radius: 50%;
+    margin-right: 12px; vertical-align: middle;
+  }
+  td.cnt { text-align: right; font-weight: 800; font-variant-numeric: tabular-nums; }
+  td.cnt.top { color: var(--lime); }
+  .statsbox .btns { display: flex; gap: 12px; }
+  .resetbtn {
+    flex: 1; padding: 14px 0; font-size: 17px; font-weight: 700;
+    background: #161616; color: #ff5c5c;
+    border: 2px solid #3a1d1d; border-radius: 14px; cursor: pointer;
+  }
+  .closebtn {
+    flex: 1; padding: 14px 0; font-size: 17px; font-weight: 700;
+    background: #10240d; color: var(--lime);
+    border: 2px solid var(--lime); border-radius: 14px; cursor: pointer;
+  }
+
   /* ---------- HUD ---------- */
   #hud {
     position: fixed; top: 0; left: 0; right: 0;
@@ -170,8 +211,23 @@
     </div>
   </div>
 
+  <div class="row">
+    <button class="ghostbtn" id="statsBtn">STATS</button>
+  </div>
+
   <button class="bigbtn" id="playBtn">PLAY</button>
   <div id="menuHigh">Best: <b id="menuHighScore">0</b></div>
+</div>
+
+<div id="stats" class="hidden">
+  <div class="statsbox">
+    <h2>Paws by colour</h2>
+    <table id="statsTable"></table>
+    <div class="btns">
+      <button class="resetbtn" id="resetStats">RESET</button>
+      <button class="closebtn" id="closeStats">CLOSE</button>
+    </div>
+  </div>
 </div>
 
 <div id="end" class="screen hidden">
@@ -229,6 +285,32 @@ document.getElementById("durations").addEventListener("click", (e) => {
 /* ---------- high score ---------- */
 let highScore = parseInt(localStorage.getItem(HS_KEY) || "0", 10) || 0;
 document.getElementById("menuHighScore").textContent = highScore;
+
+/* ---------- stats (paws per colour) ---------- */
+const STATS_KEY = "millie-bug-bash-colorstats";
+let colorStats = JSON.parse(localStorage.getItem(STATS_KEY) || "{}") || {};
+function saveStats() { localStorage.setItem(STATS_KEY, JSON.stringify(colorStats)); }
+
+const statsEl = document.getElementById("stats");
+const statsTable = document.getElementById("statsTable");
+function renderStats() {
+  const max = Math.max(0, ...Object.values(colorStats));
+  statsTable.innerHTML = COLORS.map((c) => {
+    const n = colorStats[c] || 0;
+    return `<tr><td><span class="dot" style="background:${c};box-shadow:0 0 10px ${c}"></span>${c}</td>` +
+           `<td class="cnt${n === max && max > 0 ? " top" : ""}">${n}</td></tr>`;
+  }).join("");
+}
+document.getElementById("statsBtn").addEventListener("click", () => {
+  renderStats();
+  statsEl.classList.remove("hidden");
+});
+document.getElementById("closeStats").addEventListener("click", () => statsEl.classList.add("hidden"));
+document.getElementById("resetStats").addEventListener("click", () => {
+  colorStats = {};
+  saveStats();
+  renderStats();
+});
 
 /* ---------- bugs ---------- */
 let bugs = [];
@@ -465,6 +547,8 @@ function hit(px, py) {
       addPop(b);
       score++;
       scoreEl.textContent = String(score);
+      colorStats[b.color] = (colorStats[b.color] || 0) + 1;
+      saveStats();
       if (navigator.vibrate) navigator.vibrate(12);
       // send a fresh bug in straight away so the flow never drops
       Object.assign(b, spawnBug(250 + Math.random() * 750));
