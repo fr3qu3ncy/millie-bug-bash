@@ -366,12 +366,13 @@ function spawnBug(delay) {
   else if (side === 1) { x = R() * W;      y = H + m; }
   else if (side === 2) { x = -m;           y = R() * H; }
   else                 { x = W + m;        y = R() * H; }
-  let vx, vy;
+  let vx, vy, tx = W / 2, ty = H / 2, sp = speedPxPerSec() * 0.85;
   if (mode === "roam") {
     // walk in toward a random interior point
-    const tx = W * (0.25 + R() * 0.5), ty = H * (0.25 + R() * 0.5);
+    tx = W * (0.25 + R() * 0.5);
+    ty = H * (0.25 + R() * 0.5);
     const d = Math.atan2(ty - y, tx - x);
-    const sp = roamSpeed();
+    sp = roamSpeed();
     vx = Math.cos(d) * sp;
     vy = Math.sin(d) * sp;
   } else {
@@ -380,7 +381,7 @@ function spawnBug(delay) {
     else if (side === 2) ang = -60 + R() * 120;       // left -> right
     else                 ang = 120 + R() * 120;       // right -> left
     const a = ang * Math.PI / 180;
-    const sp = speedPxPerSec() * (0.85 + R() * 0.3);
+    sp = speedPxPerSec() * (0.85 + R() * 0.3);
     vx = Math.cos(a) * sp;
     vy = Math.sin(a) * sp;
   }
@@ -392,7 +393,8 @@ function spawnBug(delay) {
     phase: R() * Math.PI * 2,
     delay: delay || 0,
     alive: false,
-    nextTurnAt: 0
+    nextTurnAt: 0,
+    tx, ty, sp
   };
 }
 
@@ -514,18 +516,27 @@ function loop(t) {
     if (b.delay > 0) { b.delay -= dt * 1000; continue; }
     if (!b.alive) b.alive = true;  // activate once spawn delay is up
     if (mode === "roam") {
-      // turn: pick a fresh interior target every 1.2–2.5s, or at screen edges
+      // pick a fresh interior target when reached, at edges, or on a timer
       const pad = b.r * 2.5;
       const atEdge = b.x < pad || b.x > W - pad || b.y < pad || b.y > H - pad;
-      if (atEdge || t > b.nextTurnAt) {
-        const tx = W * (0.2 + Math.random() * 0.6);
-        const ty = H * (0.2 + Math.random() * 0.6);
-        const d = Math.atan2(ty - b.y, tx - b.x);
-        const sp = roamSpeed() * (0.85 + Math.random() * 0.3);
-        b.vx = Math.cos(d) * sp;
-        b.vy = Math.sin(d) * sp;
+      const reached = Math.hypot(b.tx - b.x, b.ty - b.y) < UNIT * 4;
+      if (atEdge || reached || t > b.nextTurnAt) {
+        b.tx = W * (0.2 + Math.random() * 0.6);
+        b.ty = H * (0.2 + Math.random() * 0.6);
+        b.sp = roamSpeed() * (0.85 + Math.random() * 0.3);
         b.nextTurnAt = t + 1200 + Math.random() * 1300;
       }
+      // steer: rotate current heading toward the target at a capped turn rate
+      const desired = Math.atan2(b.ty - b.y, b.tx - b.x);
+      let cur = Math.atan2(b.vy, b.vx);
+      let diff = desired - cur;
+      while (diff > Math.PI) diff -= Math.PI * 2;
+      while (diff < -Math.PI) diff += Math.PI * 2;
+      const maxTurn = 4.5 * dt; // radians this frame (~258°/s top rate)
+      const step = Math.max(-maxTurn, Math.min(maxTurn, diff));
+      const newDir = cur + step;
+      b.vx = Math.cos(newDir) * b.sp;
+      b.vy = Math.sin(newDir) * b.sp;
     }
     b.x += b.vx * dt;
     b.y += b.vy * dt;
