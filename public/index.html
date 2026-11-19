@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#000000">
+<link rel="icon" href="/favicon-16.png" sizes="16x16">
+<link rel="icon" href="/favicon-32.png" sizes="32x32">
+<link rel="icon" href="/icon-192.png" sizes="192x192">
+<link rel="apple-touch-icon" href="/icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Bug Bash">
+<title>Millie's Bug Bash</title>
+<style>
+  :root {
+    --lime: #39ff14;
+    --dim: #6f6f6f;
+    --dimmer: #4a4a4a;
+    --bg: #000;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; overflow: hidden; }
+  body {
+    background: var(--bg);
+    color: #fff;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: none;
+  }
+  #game { position: fixed; inset: 0; display: block; }
+
+  .screen {
+    position: fixed; inset: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 28px; padding: 24px; z-index: 10;
+  }
+  .hidden { display: none !important; }
+
+  /* ---------- Launch screen ---------- */
+  #menu { background: #000; }
+  #menu h1 {
+    font-size: clamp(34px, 9vw, 60px);
+    font-weight: 900;
+    letter-spacing: 2px;
+    text-align: center;
+    text-shadow: 0 0 24px rgba(57,255,20,.35);
+  }
+  #menu h1 .bug { display: inline-block; transform: rotate(-12deg); }
+  #menu .sub { color: var(--dim); font-size: 17px; margin-top: -16px; }
+
+  .setting { width: 100%; max-width: 340px; }
+  .setting label {
+    display: flex; justify-content: space-between;
+    font-size: 18px; color: #bbb; margin-bottom: 8px;
+  }
+  .setting label .val { color: var(--lime); font-weight: 700; }
+
+  input[type=range] {
+    width: 100%; height: 44px;
+    appearance: none; -webkit-appearance: none;
+    background: transparent; cursor: pointer;
+  }
+  input[type=range]::-webkit-slider-runnable-track {
+    height: 8px; border-radius: 4px; background: #2a2a2a;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 30px; height: 30px; border-radius: 50%;
+    background: var(--lime); margin-top: -11px;
+    box-shadow: 0 0 12px rgba(57,255,20,.6);
+  }
+  input[type=range]::-moz-range-track { height: 8px; border-radius: 4px; background: #2a2a2a; }
+  input[type=range]::-moz-range-thumb {
+    width: 30px; height: 30px; border: none; border-radius: 50%;
+    background: var(--lime); box-shadow: 0 0 12px rgba(57,255,20,.6);
+  }
+
+  .durations { display: flex; gap: 10px; }
+  .durations button {
+    flex: 1; padding: 16px 0; font-size: 18px; font-weight: 700;
+    background: #161616; color: #999;
+    border: 2px solid #2c2c2c; border-radius: 14px; cursor: pointer;
+  }
+  .durations button.sel {
+    background: #10240d; color: var(--lime); border-color: var(--lime);
+  }
+
+  .bigbtn {
+    width: 100%; max-width: 340px;
+    padding: 22px 0; font-size: 28px; font-weight: 900; letter-spacing: 3px;
+    background: var(--lime); color: #000;
+    border: none; border-radius: 20px; cursor: pointer;
+    box-shadow: 0 0 30px rgba(57,255,20,.45);
+  }
+  .bigbtn:active { transform: scale(.97); }
+
+  #menuHigh { color: var(--dimmer); font-size: 16px; }
+  #menuHigh b { color: #8a8a8a; }
+
+  /* ---------- HUD ---------- */
+  #hud {
+    position: fixed; top: 0; left: 0; right: 0;
+    display: flex; justify-content: center; align-items: baseline; gap: 18px;
+    padding: calc(14px + env(safe-area-inset-top)) 16px 0;
+    z-index: 5; pointer-events: none;
+  }
+  #score {
+    font-size: clamp(44px, 14vw, 72px);
+    font-weight: 800;
+    color: #7d7d7d;              /* large but not bright */
+    font-variant-numeric: tabular-nums;
+  }
+  #timer {
+    position: fixed; top: calc(16px + env(safe-area-inset-top)); right: 18px;
+    font-size: 17px; color: var(--dimmer);
+    font-variant-numeric: tabular-nums; z-index: 5; pointer-events: none;
+  }
+
+  /* ---------- End screen ---------- */
+  #end { background: rgba(0,0,0,.92); }
+  #end .title { font-size: clamp(30px, 8vw, 48px); font-weight: 900; color: #ddd; letter-spacing: 2px; }
+  #endScore { font-size: clamp(72px, 24vw, 130px); font-weight: 900; line-height: 1; }
+  #endHigh { color: var(--dim); font-size: 20px; }
+  #endHigh b { color: #aaa; font-size: 24px; }
+  #newHigh {
+    font-size: 22px; font-weight: 800; color: var(--lime);
+    text-shadow: 0 0 18px rgba(57,255,20,.6);
+  }
+  #toMenu {
+    background: none; border: none; color: var(--dimmer);
+    font-size: 17px; cursor: pointer; text-decoration: underline;
+  }
+</style>
+</head>
+<body>
+
+<canvas id="game"></canvas>
+
+<div id="hud" class="hidden">
+  <span id="score">0</span>
+</div>
+<div id="timer" class="hidden">0:00</div>
+
+<div id="menu" class="screen">
+  <h1><span class="bug">🐞</span> MILLIE'S BUG BASH</h1>
+  <div class="sub">Bats the bugs. That's the whole game.</div>
+
+  <div class="setting">
+    <label>Speed <span class="val" id="speedVal">5</span></label>
+    <input type="range" id="speed" min="1" max="10" value="5" step="1">
+  </div>
+
+  <div class="setting">
+    <label>Bugs <span class="val" id="countVal">3</span></label>
+    <input type="range" id="count" min="1" max="8" value="3" step="1">
+  </div>
+
+  <div class="setting">
+    <label>Duration</label>
+    <div class="durations" id="durations">
+      <button data-s="30">30s</button>
+      <button data-s="60" class="sel">1min</button>
+      <button data-s="180">3min</button>
+      <button data-s="300">5min</button>
+    </div>
+  </div>
+
+  <button class="bigbtn" id="playBtn">PLAY</button>
+  <div id="menuHigh">Best: <b id="menuHighScore">0</b></div>
+</div>
+
+<div id="end" class="screen hidden">
+  <div class="title">TIME'S UP!</div>
+  <div id="endScore">0</div>
+  <div id="endHigh">Best: <b id="endHighScore">0</b></div>
+  <div id="newHigh" class="hidden">NEW HIGH SCORE!</div>
+  <button class="bigbtn" id="againBtn">PLAY AGAIN</button>
+  <button id="toMenu">change settings</button>
+</div>
+
+<script>
+"use strict";
+const COLORS = ["#ff2d78", "#39ff14", "#00e5ff", "#ffe600", "#ff6d00", "#c864ff"];
+const HS_KEY = "millie-bug-bash-highscore";
+
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+const menu = document.getElementById("menu");
+const endScreen = document.getElementById("end");
+const hud = document.getElementById("hud");
+const timerEl = document.getElementById("timer");
+const scoreEl = document.getElementById("score");
+
+let W = 0, H = 0, UNIT = 0;
+function resize() {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  W = window.innerWidth; H = window.innerHeight;
+  canvas.width = Math.round(W * dpr);
+  canvas.height = Math.round(H * dpr);
+  canvas.style.width = W + "px";
+  canvas.style.height = H + "px";
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  UNIT = Math.min(W, H) / 100;
+}
+window.addEventListener("resize", resize);
+resize();
+
+/* ---------- settings ---------- */
+const speedInput = document.getElementById("speed");
+const countInput = document.getElementById("count");
+const speedVal = document.getElementById("speedVal");
+const countVal = document.getElementById("countVal");
+let duration = 60;
+
+speedInput.addEventListener("input", () => speedVal.textContent = speedInput.value);
+countInput.addEventListener("input", () => countVal.textContent = countInput.value);
+document.getElementById("durations").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-s]");
+  if (!b) return;
+  duration = parseInt(b.dataset.s, 10);
+  document.querySelectorAll("#durations button").forEach(x => x.classList.toggle("sel", x === b));
+});
+
+/* ---------- high score ---------- */
+let highScore = parseInt(localStorage.getItem(HS_KEY) || "0", 10) || 0;
+document.getElementById("menuHighScore").textContent = highScore;
+
+/* ---------- bugs ---------- */
+let bugs = [];
+let pops = [];
+let score = 0;
+let playing = false;
+let endTime = 0;
+let rafId = null;
+let wakeLock = null;
+
+function speedPxPerSec() {
+  const s = parseInt(speedInput.value, 10);
+  return UNIT * (12 + s * 7);   // 19%..82% of screen per second
+}
+
+function spawnBug(delay) {
+  const side = Math.floor(Math.random() * 4);
+  const m = UNIT * 10; // start marginally off-screen
+  let x, y, ang;
+  const R = Math.random;
+  if (side === 0)      { x = R() * W;      y = -m;    ang = 60 + R() * 60; }        // top -> down
+  else if (side === 1) { x = R() * W;      y = H + m; ang = 240 + R() * 60; }       // bottom -> up
+  else if (side === 2) { x = -m;           y = R() * H; ang = -60 + R() * 120; }    // left -> right
+  else                 { x = W + m;        y = R() * H; ang = 120 + R() * 120; }    // right -> left
+  const a = ang * Math.PI / 180;
+  const sp = speedPxPerSec() * (0.85 + R() * 0.3);
+  return {
+    x, y,
+    vx: Math.cos(a) * sp,
+    vy: Math.sin(a) * sp,
+    r: UNIT * (4 + R() * 3),
+    color: COLORS[Math.floor(R() * COLORS.length)],
+    phase: R() * Math.PI * 2,
+    delay: delay || 0,
+    alive: false
+  };
+}
+
+function respawn(b) {
+  const fresh = spawnBug(0);
+  Object.assign(b, fresh);
+  b.alive = true;
+}
+
+/* ---------- pop effects ---------- */
+function addPop(b) {
+  pops.push({ x: b.x, y: b.y, r0: b.r, t0: performance.now(), color: b.color });
+}
+
+/* ---------- drawing ---------- */
+function drawBug(b, t) {
+  const dir = Math.atan2(b.vy, b.vx);
+  const wig = Math.sin(t * 0.012 + b.phase) * 0.28;
+
+  ctx.save();
+  ctx.translate(b.x, b.y);
+  ctx.rotate(dir + Math.PI / 2); // bug's head points along travel
+
+  // legs (3 per side), wiggle
+  ctx.strokeStyle = b.color;
+  ctx.lineWidth = Math.max(1.5, b.r * 0.12);
+  ctx.globalAlpha = 0.8;
+  const legLen = b.r * 1.5;
+  for (let i = 0; i < 6; i++) {
+    const s = i < 3 ? -1 : 1;
+    const idx = i % 3;
+    const ly = (idx - 1) * b.r * 0.55;
+    const baseAng = (s === -1 ? Math.PI - 1.0 : 1.0) + wig * (idx === 1 ? -1 : 1);
+    const lx = Math.cos(baseAng) * legLen;
+    const lyy = Math.sin(baseAng) * legLen * 0.6;
+    ctx.beginPath();
+    ctx.moveTo(s * b.r * 0.5, ly);
+    ctx.lineTo(s * b.r * 0.5 + lx, ly + lyy);
+    ctx.stroke();
+  }
+
+  ctx.globalAlpha = 1;
+  // glow
+  ctx.shadowColor = b.color;
+  ctx.shadowBlur = b.r * 0.9;
+
+  // body (oval, longer along travel)
+  ctx.fillStyle = b.color;
+  ctx.beginPath();
+  ctx.ellipse(0, b.r * 0.15, b.r * 0.62, b.r, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // head
+  ctx.beginPath();
+  ctx.arc(0, -b.r * 0.75, b.r * 0.42, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.shadowBlur = 0;
+  // eyes
+  ctx.fillStyle = "#000";
+  ctx.beginPath(); ctx.arc(-b.r * 0.16, -b.r * 0.85, b.r * 0.09, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc( b.r * 0.16, -b.r * 0.85, b.r * 0.09, 0, Math.PI * 2); ctx.fill();
+
+  // body stripe
+  ctx.globalAlpha = 0.35;
+  ctx.fillStyle = "#000";
+  ctx.beginPath();
+  ctx.ellipse(0, b.r * 0.15, b.r * 0.12, b.r * 0.8, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.restore();
+}
+
+function drawPops(t) {
+  pops = pops.filter(p => t - p.t0 < 320);
+  for (const p of pops) {
+    const k = (t - p.t0) / 320;
+    ctx.save();
+    ctx.globalAlpha = 1 - k;
+    ctx.strokeStyle = p.color;
+    ctx.lineWidth = 3 * (1 - k) + 1;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.r0 * (1 + k * 2.2), 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
+/* ---------- main loop ---------- */
+let lastT = 0;
+function loop(t) {
+  rafId = requestAnimationFrame(loop);
+  const dt = Math.min((t - lastT) / 1000, 0.05);
+  lastT = t;
+
+  ctx.clearRect(0, 0, W, H);
+
+  if (playing) {
+    // countdown
+    const remain = Math.max(0, endTime - t);
+    timerEl.textContent = formatTime(remain);
+    if (remain <= 0) { endGame(); }
+  }
+
+  for (const b of bugs) {
+    if (b.delay > 0) { b.delay -= dt * 1000; continue; }
+    if (!b.alive) b.alive = true;  // activate once spawn delay is up
+    b.x += b.vx * dt;
+    b.y += b.vy * dt;
+    const m = UNIT * 12;
+    if (b.x < -m || b.x > W + m || b.y < -m || b.y > H + m) respawn(b);
+    if (playing) drawBug(b, t);
+  }
+  drawPops(t);
+}
+
+function formatTime(ms) {
+  const s = Math.ceil(ms / 1000);
+  return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
+}
+
+/* ---------- game flow ---------- */
+async function acquireWakeLock() {
+  try {
+    if (navigator.wakeLock) wakeLock = await navigator.wakeLock.request("screen");
+  } catch (e) { /* ignore */ }
+}
+function releaseWakeLock() {
+  try { if (wakeLock) wakeLock.release(); } catch (e) {}
+  wakeLock = null;
+}
+
+function startGame() {
+  score = 0;
+  scoreEl.textContent = "0";
+  pops = [];
+  bugs = [];
+  const n = parseInt(countInput.value, 10);
+  for (let i = 0; i < n; i++) bugs.push(spawnBug(i * 300));
+  playing = true;
+  endTime = performance.now() + duration * 1000;
+  menu.classList.add("hidden");
+  endScreen.classList.add("hidden");
+  hud.classList.remove("hidden");
+  timerEl.classList.remove("hidden");
+  acquireWakeLock();
+}
+
+function endGame() {
+  playing = false;
+  releaseWakeLock();
+  hud.classList.add("hidden");
+  timerEl.classList.add("hidden");
+
+  const isRecord = score > highScore;
+  if (isRecord) {
+    highScore = score;
+    localStorage.setItem(HS_KEY, String(highScore));
+  }
+  document.getElementById("endScore").textContent = score;
+  document.getElementById("endHighScore").textContent = highScore;
+  document.getElementById("newHigh").classList.toggle("hidden", !isRecord);
+  document.getElementById("menuHighScore").textContent = highScore;
+  endScreen.classList.remove("hidden");
+}
+
+function showMenu() {
+  playing = false;
+  releaseWakeLock();
+  endScreen.classList.add("hidden");
+  hud.classList.add("hidden");
+  timerEl.classList.add("hidden");
+  menu.classList.remove("hidden");
+  // keep bugs crawling on the menu as a little teaser, at low alpha
+  if (bugs.length === 0) for (let i = 0; i < 3; i++) bugs.push(spawnBug(i * 400));
+}
+
+/* ---------- input (paws) ---------- */
+function hit(px, py) {
+  for (let i = bugs.length - 1; i >= 0; i--) {
+    const b = bugs[i];
+    if (!b.alive || b.delay > 0) continue;
+    const dx = px - b.x, dy = py - b.y;
+    if (dx * dx + dy * dy < Math.pow(b.r * 1.6, 2)) {  // generous hitbox for paws
+      b.alive = false;
+      addPop(b);
+      score++;
+      scoreEl.textContent = String(score);
+      if (navigator.vibrate) navigator.vibrate(12);
+      return true;
+    }
+  }
+  return false;
+}
+canvas.addEventListener("touchstart", (e) => {
+  e.preventDefault();
+  for (const t of e.changedTouches) hit(t.clientX, t.clientY);
+}, { passive: false });
+canvas.addEventListener("mousedown", (e) => hit(e.clientX, e.clientY));
+
+document.getElementById("playBtn").addEventListener("click", startGame);
+document.getElementById("againBtn").addEventListener("click", startGame);
+document.getElementById("toMenu").addEventListener("click", showMenu);
+
+// teaser bugs crawling on the initial launch screen
+for (let i = 0; i < 3; i++) bugs.push(spawnBug(i * 400));
+
+rafId = requestAnimationFrame(loop);
+</script>
+</body>
+</html>

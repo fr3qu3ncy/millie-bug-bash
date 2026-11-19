@@ -1,0 +1,7 @@
+services:
+  web:
+    build: .
+    container_name: millie-bug-bash
+    ports:
+      - "8400:8400"
+    restart: unless-stopped
