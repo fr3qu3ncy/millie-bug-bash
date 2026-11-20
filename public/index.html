@@ -366,7 +366,7 @@ function spawnBug(delay) {
   else if (side === 1) { x = R() * W;      y = H + m; }
   else if (side === 2) { x = -m;           y = R() * H; }
   else                 { x = W + m;        y = R() * H; }
-  let vx, vy, tx = W / 2, ty = H / 2, sp = speedPxPerSec() * 0.85;
+  let vx, vy, tx = W / 2, ty = H / 2, sp = speedPxPerSec() * 0.85, baseAng = null;
   if (mode === "roam") {
     // walk in toward a random interior point
     tx = W * (0.25 + R() * 0.5);
@@ -380,10 +380,10 @@ function spawnBug(delay) {
     else if (side === 1) ang = 240 + R() * 60;        // bottom -> up
     else if (side === 2) ang = -60 + R() * 120;       // left -> right
     else                 ang = 120 + R() * 120;       // right -> left
-    const a = ang * Math.PI / 180;
+    baseAng = ang * Math.PI / 180;   // original crossing direction
     sp = speedPxPerSec() * (0.85 + R() * 0.3);
-    vx = Math.cos(a) * sp;
-    vy = Math.sin(a) * sp;
+    vx = Math.cos(baseAng) * sp;
+    vy = Math.sin(baseAng) * sp;
   }
   return {
     x, y,
@@ -394,7 +394,7 @@ function spawnBug(delay) {
     delay: delay || 0,
     alive: false,
     nextTurnAt: 0,
-    tx, ty, sp
+    tx, ty, sp, baseAng
   };
 }
 
@@ -512,9 +512,10 @@ function loop(t) {
     if (remain <= 0) { endGame(); }
   }
 
-  for (const b of bugs) {
-    if (b.delay > 0) { b.delay -= dt * 1000; continue; }
-    if (!b.alive) b.alive = true;  // activate once spawn delay is up
+  // pass 1: work out where each bug wants to go (so they react to each other's intent)
+  const want = [];
+  bugs.forEach((b, i) => {
+    if (b.delay > 0 || !b.alive) return;
     if (mode === "roam") {
       // pick a fresh interior target when reached, at edges, or on a timer
       const pad = b.r * 2.5;
@@ -526,36 +527,53 @@ function loop(t) {
         b.sp = roamSpeed() * (0.85 + Math.random() * 0.3);
         b.nextTurnAt = t + 1200 + Math.random() * 1300;
       }
-      // avoid other roams: steer away when too close, and slow down
-      let avx = 0, avy = 0, close = false;
-      for (const o of bugs) {
-        if (o === b || !o.alive || o.delay > 0) continue;
-        const dx = b.x - o.x, dy = b.y - o.y;
-        const d = Math.hypot(dx, dy);
-        const range = (b.r + o.r) * 2.5;
-        if (d < range && d > 0.001) {
-          close = true;
-          const w = (1 - d / range) / d;  // stronger the closer they are
-          avx += dx * w;
-          avy += dy * w;
-        }
+    }
+    // avoidance: push away from any bug within (r1+r2) × 2.5, stronger when closer
+    let ax = 0, ay = 0, close = false;
+    for (const o of bugs) {
+      if (o === b || !o.alive || o.delay > 0) continue;
+      const dx = b.x - o.x, dy = b.y - o.y;
+      const d = Math.hypot(dx, dy);
+      const range = (b.r + o.r) * 2.5;
+      if (d < range && d > 0.001) {
+        close = true;
+        const w = (1 - d / range) / d;
+        ax += dx * w;
+        ay += dy * w;
       }
-      let desired = Math.atan2(b.ty - b.y, b.tx - b.x);
-      let spMul = 1, maxTurn = 4.5 * dt;
-      if (close) {
-        desired = Math.atan2(avy, avx); // head away from the crowd
-        spMul = 0.4;                     // crawl around them
-        maxTurn = 2.5 * dt;              // cautious, smaller turns
-      }
-      // steer: rotate current heading toward the goal at a capped turn rate
+    }
+    let desired, spMul = 1;
+    if (mode === "roam") {
+      desired = close ? Math.atan2(ay, ax) : Math.atan2(b.ty - b.y, b.tx - b.x);
+      if (close) spMul = 0.4; // crawl around the others
+    } else {
+      // parade: keep the original crossing course, deflected away from close bugs
+      const bx = Math.cos(b.baseAng), by = Math.sin(b.baseAng);
+      const side = i % 2 === 0 ? 1 : -1; // break head-on symmetry
+      const px = -by * side, py = bx * side;
+      const vx = bx + (close ? ax * 1.6 : 0) + (close ? px * 0.33 : 0);
+      const vy = by + (close ? ay * 1.6 : 0) + (close ? py * 0.33 : 0);
+      desired = Math.atan2(vy, vx);
+      if (close) spMul = 0.55; // ease off when parting
+    }
+    want[i] = { desired, spMul };
+  });
+
+  // pass 2: move — each bug smoothly steers toward its desired heading
+  bugs.forEach((b, i) => {
+    if (b.delay > 0) { b.delay -= dt * 1000; if (!b.alive) b.alive = b.delay <= 0; return; }
+    if (!b.alive) b.alive = true;
+    const w = want[i];
+    if (w) {
+      const maxTurn = (mode === "roam" && w.spMul < 1 ? 2.5 : 4.5) * dt;
       let cur = Math.atan2(b.vy, b.vx);
-      let diff = desired - cur;
+      let diff = w.desired - cur;
       while (diff > Math.PI) diff -= Math.PI * 2;
       while (diff < -Math.PI) diff += Math.PI * 2;
       const step = Math.max(-maxTurn, Math.min(maxTurn, diff));
       const newDir = cur + step;
-      b.vx = Math.cos(newDir) * b.sp * spMul;
-      b.vy = Math.sin(newDir) * b.sp * spMul;
+      b.vx = Math.cos(newDir) * b.sp * w.spMul;
+      b.vy = Math.sin(newDir) * b.sp * w.spMul;
     }
     b.x += b.vx * dt;
     b.y += b.vy * dt;
@@ -567,6 +585,23 @@ function loop(t) {
       b.y = Math.min(Math.max(b.y, b.r), H - b.r);
     }
     if (playing) drawBug(b, t);
+  });
+
+  // pass 3: hard separation — resolve any actual body overlap so they never visually collide
+  for (let a = 0; a < bugs.length; a++) {
+    for (let c = a + 1; c < bugs.length; c++) {
+      const A = bugs[a], B = bugs[c];
+      if (!A.alive || !B.alive || A.delay > 0 || B.delay > 0) continue;
+      const dx = B.x - A.x, dy = B.y - A.y;
+      const d = Math.hypot(dx, dy);
+      const minD = A.r + B.r;
+      if (d > 0.001 && d < minD) {
+        const push = (minD - d) / 2;
+        const nx = dx / d, ny = dy / d;
+        A.x -= nx * push; A.y -= ny * push;
+        B.x += nx * push; B.y += ny * push;
+      }
+    }
   }
   drawPops(t);
 }
